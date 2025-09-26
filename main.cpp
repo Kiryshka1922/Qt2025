@@ -1,12 +1,11 @@
-#include <QtWidgets>
 #include <QApplication>
-#include <Widget.h>
-
+#include "projects/IMage.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
-    Widget* w = new Widget();
-
-    w->show();
+    
+    Widget widget;
+    widget.show();
+    
     return app.exec();
 }

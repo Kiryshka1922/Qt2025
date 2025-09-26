@@ -1,5 +1,6 @@
 QT += core gui widgets
-TARGET = my_qt_app
+TARGET = image_filter_app
 TEMPLATE = app
-SOURCES += main.cpp
+SOURCES += main.cpp Widget.cpp
+HEADERS += projects/IMage.h
 CONFIG += rerunqmake
