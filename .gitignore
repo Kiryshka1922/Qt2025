@@ -1,2 +1,5 @@
 /debug
 /release
+.qmake.stash
+Makefile.debug
+Makefile.release
