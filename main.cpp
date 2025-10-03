@@ -1,8 +1,13 @@
 #include <QApplication>
+<<<<<<< Updated upstream
 #include <QMainWindow>
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QPushButton>
+=======
+#include <Widget.h>
+
+>>>>>>> Stashed changes
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
