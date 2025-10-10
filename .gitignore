@@ -1,10 +1,7 @@
+./vscode
 /debug
-<<<<<<< Updated upstream
-/release
-=======
 /release
 .qmake.stash
 Makefile.Debug
 Makefile.Release
 Makefile
->>>>>>> Stashed changes
