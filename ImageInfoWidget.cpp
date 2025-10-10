@@ -1,13 +1,11 @@
 #include "ImageInfoWidget.h"
 #include <QLocale>
-
 ImageInfoWidget::ImageInfoWidget(QWidget *parent)
     : QWidget(parent)
 {
     setupUI();
     clearInfo();
 }
-
 void ImageInfoWidget::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -43,7 +41,6 @@ void ImageInfoWidget::setupUI()
     setStyleSheet("QWidget { background-color: white; border: 1px solid #ccc; padding: 10px; }");
     setMinimumWidth(300);
 }
-
 void ImageInfoWidget::updateImageInfo(const QImage &image)
 {
     if (image.isNull()) {
@@ -62,7 +59,6 @@ void ImageInfoWidget::updateImageInfo(const QImage &image)
                               .arg(locale.toString(image.dotsPerMeterX() * 0.0254))
                               .arg(locale.toString(image.dotsPerMeterY() * 0.0254)));
 }
-
 void ImageInfoWidget::clearInfo()
 {
     m_filenameLabel->setText("-");

@@ -1,21 +1,17 @@
 #ifndef IMAGEINFOWIDGET_H
 #define IMAGEINFOWIDGET_H
-
 #include <QWidget>
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QImage>
-
 class ImageInfoWidget : public QWidget
 {
     Q_OBJECT
-
 public:
     explicit ImageInfoWidget(QWidget *parent = nullptr);
     void updateImageInfo(const QImage &image);
     void clearInfo();
-
 private:
     void setupUI();
     
@@ -26,5 +22,4 @@ private:
     
     QFormLayout *m_formLayout;
 };
-
 #endif

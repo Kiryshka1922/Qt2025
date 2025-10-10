@@ -17,13 +17,15 @@
 #include <QImageReader>
 #include <QApplication>
 #include <ImageInfoWidget.h>
+#include <RGBToHalf.h>
+#include <binarizationFunction.h>
+
 
 void filter2D(QImage &sourceImage, double *filterMatrix, size_t matrixWidth, size_t matrixHeight);
 
 class Widget : public QWidget
 {
     Q_OBJECT
-
 private:
     QImage          sourceImage;
     QImage          processedImage;
@@ -40,7 +42,14 @@ private:
     QComboBox       *filtersList;
     QSpinBox        *kernelSizeSpinBox;
     QTableWidget    *kernelTable;
-    
+
+    QPushButton *convertToGray601Button;
+    QPushButton *convertToGray709Button;
+    QPushButton *otsuBinarizationButton;
+    QPushButton *huangBinarizationButton;
+    QPushButton *niblackBinarizationButton;
+    QPushButton *isodataBinarizationButton;
+        
     double blurKernel[9] = {0.0625, 0.125, 0.0625, 0.125, 0.25, 0.125, 0.0625, 0.125, 0.0625};
     double sharpenKernel[9] = {0, -1, 0, -1, 5, -1, 0, -1, 0};
     double outlineKernel[9] = {-1, -1, -1, -1, 8, -1, -1, -1, -1};
@@ -64,4 +73,12 @@ private slots:
     void handleSaveClick();
     void handleKernelSizeChanged(int size);
     void handleFilterSelectionChanged(int index);
+    void handleConvertToGray601();
+    void handleConvertToGray709();
+    void handleOtsuBinarization();
+    void handleHuangBinarization();
+    void handleNiblackBinarization();
+    void handleISODATABinarization();
+    void updateProcessedImage();
+
 };

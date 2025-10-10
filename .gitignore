@@ -1,4 +1,4 @@
-./vscode
+/.vscode
 /debug
 /release
 .qmake.stash
