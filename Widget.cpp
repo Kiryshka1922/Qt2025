@@ -2,6 +2,9 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <cmath>
+#include <tiffio.h>
+
+
 Widget::Widget(QWidget *parentWidget) : QWidget(parentWidget) {
     setWindowTitle("Фильтрация изображений");
     resize(1400, 700);
@@ -168,36 +171,102 @@ double* Widget::getCurrentKernel() {
     
     return kernel;
 }
+
 void Widget::handleSaveClick() {
     if (processedImage.isNull()) {
         QMessageBox::warning(this, "Ошибка", "Нет изображения для сохранения");
         return;
     }
-    
+
     QString fileName = QFileDialog::getSaveFileName(
         this,
         "Сохранить изображение",
-        QDir::homePath() + "/filtered_image.png",
-        "PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp);;Все файлы (*)"
+        QDir::homePath() + "/filtered_image.tif",
+        "TIFF (*.tif *.tiff);;PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp);;Все файлы (*)"
     );
-    
-    if (!fileName.isEmpty()) {
-        QString format = "PNG";
-        if (fileName.endsWith(".jpg", Qt::CaseInsensitive) || fileName.endsWith(".jpeg", Qt::CaseInsensitive)) {
-            format = "JPEG";
-        } else if (fileName.endsWith(".bmp", Qt::CaseInsensitive)) {
-            format = "BMP";
+
+    if (fileName.isEmpty()) return;
+
+    if (fileName.endsWith(".tif", Qt::CaseInsensitive) || fileName.endsWith(".tiff", Qt::CaseInsensitive)) {
+        QDialog dialog(this);
+        dialog.setWindowTitle("Параметры сохранения TIFF");
+        QFormLayout form(&dialog);
+
+        QComboBox *combo = new QComboBox(&dialog);
+        combo->addItem("No compression (None)");
+        combo->addItem("Deflate (zlib) — уровень 1..9");
+        combo->addItem("LZMA — preset 1..9");
+        combo->addItem("PackBits");
+        combo->addItem("LZW");
+        combo->addItem("CCITT Group 3 (моно)");
+        combo->addItem("CCITT Group 4 (моно)");
+        combo->addItem("JPEG — качество 0..100");
+        form.addRow("Compression:", combo);
+
+        QSpinBox *paramSpin = new QSpinBox(&dialog);
+        paramSpin->setRange(0, 100);
+        paramSpin->setValue(6);
+        form.addRow("Параметр (если применимо):", paramSpin);
+
+        QLabel *hint = new QLabel("Для Deflate/LZMA используйте 1..9; для JPEG 0..100. Для остальных параметр игнорируется.");
+        form.addRow(hint);
+
+        QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                   Qt::Horizontal, &dialog);
+        form.addRow(&buttonBox);
+        connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+        if (dialog.exec() != QDialog::Accepted) return;
+
+        TiffCompression comp = TiffCompression::None;
+        switch (combo->currentIndex()) {
+            case 0: comp = TiffCompression::None; break;
+            case 1: comp = TiffCompression::Deflate; break;
+            case 2: comp = TiffCompression::LZMA; break;
+            case 3: comp = TiffCompression::PackBits; break;
+            case 4: comp = TiffCompression::LZW; break;
+            case 5: comp = TiffCompression::CCITTFax3; break;
+            case 6: comp = TiffCompression::CCITTFax4; break;
+            case 7: comp = TiffCompression::JPEG; break;
+            default: comp = TiffCompression::None; break;
         }
-        
-        if (processedImage.save(fileName, format.toUtf8())) {
-            QMessageBox::information(this, "Успех", 
-                QString("Изображение сохранено как:\n%1").arg(fileName));
+
+        int param = paramSpin->value();
+        if (comp == TiffCompression::Deflate || comp == TiffCompression::LZMA) {
+            if (param < 1) param = 1;
+            if (param > 9) param = 9;
+        } else if (comp == TiffCompression::JPEG) {
+            if (param < 0) param = 0;
+            if (param > 100) param = 100;
+        }
+
+        QString err;
+        if (saveTiffWithLibTiff(processedImage, fileName, comp, param, err)) {
+            QMessageBox::information(this, "Успех", QString("Изображение сохранено как:\n%1").arg(fileName));
         } else {
-            QMessageBox::warning(this, "Ошибка", 
-                QString("Не удалось сохранить изображение:\n%1").arg(fileName));
+            QMessageBox::warning(this, "Ошибка", QString("Не удалось сохранить TIFF:\n%1").arg(err));
         }
+
+        return;
+    }
+
+    QString format = "PNG";
+    if (fileName.endsWith(".jpg", Qt::CaseInsensitive) || fileName.endsWith(".jpeg", Qt::CaseInsensitive)) {
+        format = "JPEG";
+    } else if (fileName.endsWith(".bmp", Qt::CaseInsensitive)) {
+        format = "BMP";
+    }
+
+    if (processedImage.save(fileName, format.toUtf8())) {
+        QMessageBox::information(this, "Успех",
+            QString("Изображение сохранено как:\n%1").arg(fileName));
+    } else {
+        QMessageBox::warning(this, "Ошибка",
+            QString("Не удалось сохранить изображение:\n%1").arg(fileName));
     }
 }
+
 void Widget::handleKernelSizeChanged(int size) {
     updateKernelTable();
 }
@@ -346,4 +415,156 @@ void Widget::updateProcessedImage() {
     huangBinarizationButton->setEnabled(isGrayscale);
     niblackBinarizationButton->setEnabled(isGrayscale);
     isodataBinarizationButton->setEnabled(isGrayscale);
+}
+
+bool Widget::saveTiffWithLibTiff(const QImage &imageIn, const QString &fileName,
+                                 TiffCompression compression, int parameter, QString &errorString)
+{
+    if (imageIn.isNull()) {
+        errorString = "Пустое изображение";
+        return false;
+    }
+
+    QImage image = imageIn;
+
+    if ((compression == TiffCompression::CCITTFax3 || compression == TiffCompression::CCITTFax4)
+        && image.format() != QImage::Format_Mono) {
+        image = image.convertToFormat(QImage::Format_Grayscale8);
+        QImage mono(image.width(), image.height(), QImage::Format_Mono);
+        for (int y = 0; y < image.height(); ++y) {
+            const uchar *src = image.constScanLine(y);
+            for (int x = 0; x < image.width(); ++x) {
+                mono.setPixel(x, y, src[x] > 128 ? 1 : 0);
+            }
+        }
+        image = mono;
+    }
+
+    int width = image.width();
+    int height = image.height();
+
+    QByteArray fn = QFile::encodeName(fileName);
+    TIFF *tif = TIFFOpen(fn.constData(), "w");
+    if (!tif) {
+        errorString = "TIFFOpen() failed (возможно, отсутствует libtiff или нет прав на запись)";
+        return false;
+    }
+
+    // Общие поля
+    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (uint32)width);
+    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32)height);
+    TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(tif, TIFFTAG_SOFTWARE, "Custom Qt/libtiff");
+
+    int tiffCompression = COMPRESSION_NONE;
+    switch (compression) {
+        case TiffCompression::None:
+            tiffCompression = COMPRESSION_NONE;
+            break;
+        case TiffCompression::Deflate:
+            tiffCompression = COMPRESSION_DEFLATE;
+            TIFFSetField(tif, TIFFTAG_ZIPQUALITY, parameter);
+            break;
+        case TiffCompression::LZMA:
+            tiffCompression = COMPRESSION_LZMA;
+            TIFFSetField(tif, TIFFTAG_LZMAPRESET, parameter);
+            break;
+        case TiffCompression::PackBits:
+            tiffCompression = COMPRESSION_PACKBITS;
+            break;
+        case TiffCompression::LZW:
+            tiffCompression = COMPRESSION_LZW;
+            break;
+        case TiffCompression::CCITTFax3:
+            tiffCompression = COMPRESSION_CCITTFAX3;
+            break;
+        case TiffCompression::CCITTFax4:
+            tiffCompression = COMPRESSION_CCITTFAX4;
+            break;
+        case TiffCompression::JPEG:
+            tiffCompression = COMPRESSION_JPEG;
+            TIFFSetField(tif, TIFFTAG_JPEGQUALITY, parameter);
+            break;
+        default:
+            tiffCompression = COMPRESSION_NONE;
+            break;
+    }
+    TIFFSetField(tif, TIFFTAG_COMPRESSION, tiffCompression);
+
+    if (image.format() == QImage::Format_Mono) {
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)1);
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, (uint16)1);
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, 0));
+
+        tsize_t scanlineSize = TIFFScanlineSize(tif);
+        std::vector<unsigned char> buffer(scanlineSize);
+
+        for (int row = 0; row < height; ++row) {
+            const uchar *src = image.constScanLine(row);
+
+            int bytesInSrc = (width + 7) / 8;
+            int bytesToCopy = std::min<int>(bytesInSrc, (int)scanlineSize);
+            memcpy(buffer.data(), src, bytesToCopy);
+
+            if (scanlineSize > bytesToCopy) memset(buffer.data() + bytesToCopy, 0, scanlineSize - bytesToCopy);
+
+            if (TIFFWriteScanline(tif, buffer.data(), row, 0) < 0) {
+                TIFFClose(tif);
+                errorString = QString("TIFFWriteScanline failed on row %1").arg(row);
+                return false;
+            }
+        }
+    } else if (image.format() == QImage::Format_Grayscale8 || image.format() == QImage::Format_Indexed8) {
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)8);
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, (uint16)1);
+        TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, 0));
+
+        tsize_t scanlineSize = TIFFScanlineSize(tif);
+        std::vector<unsigned char> buffer(scanlineSize);
+
+        for (int row = 0; row < height; ++row) {
+            const uchar *src = image.constScanLine(row);
+            memcpy(buffer.data(), src, width);
+            if (TIFFWriteScanline(tif, buffer.data(), row, 0) < 0) {
+                TIFFClose(tif);
+                errorString = QString("TIFFWriteScanline failed on row %1").arg(row);
+                return false;
+            }
+        }
+    } else {
+        QImage rgb = image.convertToFormat(QImage::Format_RGB888);
+
+        TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, (uint16)8);
+        TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, (uint16)3);
+        TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+
+        if (compression == TiffCompression::JPEG) {
+            TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_YCBCR);
+            TIFFSetField(tif, TIFFTAG_JPEGCOLORMODE, JPEGCOLORMODE_RGB);
+            TIFFSetField(tif, TIFFTAG_JPEGQUALITY, parameter);
+        } else {
+            TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+        }
+
+        TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, 0));
+
+        tsize_t scanlineSize = TIFFScanlineSize(tif);
+        std::vector<unsigned char> buffer(scanlineSize);
+
+        for (int row = 0; row < height; ++row) {
+            const uchar *src = rgb.constScanLine(row);
+            memcpy(buffer.data(), src, width * 3);
+            if (TIFFWriteScanline(tif, buffer.data(), row, 0) < 0) {
+                TIFFClose(tif);
+                errorString = QString("TIFFWriteScanline failed on row %1").arg(row);
+                return false;
+            }
+        }
+    }
+
+    TIFFClose(tif);
+    return true;
 }
