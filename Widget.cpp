@@ -2,6 +2,7 @@
 #include <QPainter>
 #include <QMouseEvent>
 #include <cmath>
+#include <QFormLayout>
 #include <tiffio.h>
 
 
@@ -450,7 +451,6 @@ bool Widget::saveTiffWithLibTiff(const QImage &imageIn, const QString &fileName,
         return false;
     }
 
-    // Общие поля
     TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (uint32)width);
     TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32)height);
     TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
@@ -568,3 +568,4 @@ bool Widget::saveTiffWithLibTiff(const QImage &imageIn, const QString &fileName,
     TIFFClose(tif);
     return true;
 }
+

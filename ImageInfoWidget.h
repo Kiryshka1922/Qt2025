@@ -15,10 +15,11 @@ public:
 private:
     void setupUI();
     
-    // Метки для отображения информации
     QLabel *m_filenameLabel;
     QLabel *m_sizeLabel;
     QLabel *m_resolutionLabel;
+    QLabel *m_formatLabel;
+    QLabel *m_depthLabel;
     
     QFormLayout *m_formLayout;
 };

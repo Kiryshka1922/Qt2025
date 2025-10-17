@@ -35,6 +35,7 @@ enum class TiffCompression {
     JPEG       // параметр 0..100 (jpeg quality)
 };
 
+
 class Widget : public QWidget
 {
     Q_OBJECT
@@ -70,7 +71,8 @@ private:
     double embossKernel[9] = {-2, -1, 0, -1, 1, 1, 0, 1, 2};
     
     bool saveTiffWithLibTiff(const QImage &image, const QString &fileName,
-                         TiffCompression compression, int parameter, QString &errorString);
+                             TiffCompression compression, int parameter, QString &errorString);
+    
 public:
     Widget(QWidget *parentWidget = nullptr);
     void loadImageFile(const QString &filePath);
