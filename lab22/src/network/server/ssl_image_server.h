@@ -9,7 +9,6 @@
 
 class HttpRequestHandler;
 
-// SSL сервер с поддержкой ГОСТ шифрования
 class SslImageServer : public QSslServer {
     Q_OBJECT
 public:

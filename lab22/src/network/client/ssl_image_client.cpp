@@ -13,11 +13,8 @@ SslImageClient::SslImageClient(QObject *parent)
 
 void SslImageClient::setupGostSupport()
 {
-    // Настройка SSL конфигурации с поддержкой ГОСТ
     QSslConfiguration config = QSslConfiguration::defaultConfiguration();
 
-    // Приоритет шифров (ГОСТ алгоритмы должны быть в начале списка)
-    // Используем стандартные шифры для совместимости
     QString cipherString = "ECDHE-RSA-AES256-GCM-SHA384:"
                            "ECDHE-RSA-AES128-GCM-SHA256:"
                            "AES256-GCM-SHA384:"
@@ -30,7 +27,6 @@ void SslImageClient::setupGostSupport()
     // Включаем только TLS 1.2 и выше
     config.setProtocol(QSsl::TlsV1_2OrLater);
 
-    // Для тестирования отключаем проверку сертификатов
     config.setPeerVerifyMode(QSslSocket::VerifyNone);
 
     sslConfig = config;
@@ -71,29 +67,12 @@ void SslImageClient::fetchImage(const QString &urlString)
     imageData.clear();
     errorEmitted = false; // Сбрасываем флаг при новом запросе
 
-    connect(socket, &QSslSocket::encrypted, this, &SslImageClient::onEncrypted);
-    connect(socket, &QSslSocket::sslErrors, this, &SslImageClient::onSslErrors);
     connect(socket, &QSslSocket::connected, this, &SslImageClient::onConnected);
     connect(socket, &QSslSocket::readyRead, this, &SslImageClient::onReadyRead);
     connect(socket, &QSslSocket::errorOccurred, this, &SslImageClient::onError);
     connect(socket, &QSslSocket::disconnected, this, &SslImageClient::onDisconnected);
 
     socket->connectToHostEncrypted(host, port);
-}
-
-void SslImageClient::onEncrypted()
-{
-    // SSL соединение установлено
-}
-
-void SslImageClient::onSslErrors(const QList<QSslError> &errors)
-{
-    // Для тестирования игнорируем ошибки сертификатов
-    Q_UNUSED(errors);
-    if (socket)
-    {
-        socket->ignoreSslErrors();
-    }
 }
 
 void SslImageClient::onConnected()
@@ -132,11 +111,6 @@ void SslImageClient::parseHttpResponse()
         // Парсим первую строку статуса
         if (headerLines.isEmpty())
         {
-            if (!errorEmitted)
-            {
-                errorEmitted = true;
-                emit errorOccurred("Invalid HTTP response");
-            }
             socket->disconnectFromHost();
             return;
         }
@@ -192,27 +166,20 @@ void SslImageClient::parseHttpResponse()
             return;
         }
 
-        // Удаляем заголовки из буфера
         responseBuffer.remove(0, headerEnd + 4);
         headersReceived = true;
     }
 
-    // Добавляем данные изображения
     imageData.append(responseBuffer);
     responseBuffer.clear();
 
-    // Проверяем, получены ли все данные
     if (contentLength > 0 && imageData.size() >= contentLength)
     {
-        // Обрезаем до нужного размера
         imageData = imageData.left(contentLength);
 
-        // Загружаем изображение
         QImage image;
         if (image.loadFromData(imageData, "JPEG"))
         {
-            // Устанавливаем флаг, чтобы предотвратить показ ошибки при закрытии соединения
-            errorEmitted = true;
             emit imageReceived(image);
         }
         else
@@ -226,36 +193,12 @@ void SslImageClient::parseHttpResponse()
 
         socket->disconnectFromHost();
     }
-    else if (contentLength == 0)
-    {
-        // Если Content-Length не указан, ждем закрытия соединения
-    }
 }
 
 void SslImageClient::onError(QAbstractSocket::SocketError error)
 {
-    // Предотвращаем множественные сигналы ошибки
     if (errorEmitted)
     {
-        return;
-    }
-
-    // Игнорируем RemoteHostClosedError, если данные уже получены
-    // Это нормальное закрытие соединения после передачи данных
-    if (error == QAbstractSocket::RemoteHostClosedError)
-    {
-        // Если заголовки получены и данные есть, это нормальное закрытие
-        if (headersReceived && !imageData.isEmpty())
-        {
-            // Проверяем, можно ли загрузить изображение
-            if (contentLength == 0 || imageData.size() >= contentLength)
-            {
-                // Данные получены, не показываем ошибку
-                return;
-            }
-        }
-        // Если соединение закрыто до получения данных, это ошибка
-        // Но не критичная, просто игнорируем
         return;
     }
 
@@ -303,39 +246,9 @@ void SslImageClient::onDisconnected()
             QImage image;
             if (image.loadFromData(imageData, "JPEG"))
             {
-                // Устанавливаем флаг, чтобы предотвратить показ ошибки при закрытии соединения
-                errorEmitted = true;
                 emit imageReceived(image);
                 return;
             }
-            else if (!errorEmitted)
-            {
-                errorEmitted = true;
-                emit errorOccurred("Failed to decode JPEG image");
-            }
         }
     }
-}
-
-QString SslImageClient::getHeaderValue(const QStringList &headers, const QString &key) const
-{
-    for (const QString &line : headers)
-    {
-        if (line.startsWith(key + ":", Qt::CaseInsensitive))
-        {
-            return line.mid(key.length() + 1).trimmed();
-        }
-    }
-    return QString();
-}
-
-int SslImageClient::getStatusCode(const QString &statusLine) const
-{
-    // Пример: "HTTP/1.1 200 OK"
-    QStringList parts = statusLine.split(" ");
-    if (parts.size() >= 2)
-    {
-        return parts[1].toInt();
-    }
-    return -1;
 }
